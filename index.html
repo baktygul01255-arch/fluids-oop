@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Лаборатория Потоков: Ламинарное и Турбулентное движение</title>
+    <style>
+        :root {
+            --bg-color: #0b132b;
+            --panel-bg: #1c2541;
+            --text-main: #ffffff;
+            --accent-blue: #4ea8de;
+            --accent-green: #38b000;
+            --accent-orange: #ffb703;
+            --border-color: #3a506b;
+        }
+
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        body {
+            margin: 0; padding: 20px;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 50% 0%, #1c2541 0%, #0b132b 100%);
+            color: var(--text-main);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 100vh;
+        }
+
+        .game-card {
+            background: var(--panel-bg);
+            border: 4px solid var(--border-color);
+            border-radius: 30px;
+            width: 100%; max-width: 900px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.6);
+            overflow: hidden;
+            display: flex; flex-direction: column;
+            position: relative;
+        }
+
+        .header {
+            background: rgba(0,0,0,0.3);
+            padding: 20px 80px 20px 20px; 
+            text-align: center; position: relative;
+            border-bottom: 2px solid var(--border-color);
+        }
+        
+        .level-badge {
+            display: inline-block; font-size: 16px; color: var(--accent-blue); 
+            font-weight: bold; margin-bottom: 10px;
+            background: rgba(78, 168, 222, 0.15); padding: 5px 15px; border-radius: 20px;
+        }
+
+        .title {
+            font-size: 26px; font-weight: bold; margin: 0; color: #fff;
+        }
+
+        .btn-voice {
+            position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
+            width: 60px; height: 60px; border-radius: 30px;
+            background: var(--accent-orange); border: none; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: transform 0.2s, background 0.2s;
+            box-shadow: 0 4px 10px rgba(255, 183, 3, 0.4);
+        }
+        .btn-voice:hover { transform: translateY(-50%) scale(1.05); background: #ffc300; }
+        .btn-voice:active { transform: translateY(-50%) scale(0.95); }
+        .btn-voice svg { fill: #fff; width: 32px; height: 32px; }
+
+        .game-area {
+            display: flex; flex-direction: column; padding: 30px; gap: 20px;
+            align-items: center; justify-content: center;
+        }
+
+        .instruction {
+            font-size: 22px; line-height: 1.5; text-align: center;
+            color: #e0fbfc; max-width: 750px;
+        }
+
+        .visual-box {
+            width: 100%; max-width: 650px; height: 320px;
+            background: #050b14; border-radius: 20px;
+            border: 3px solid var(--border-color);
+            position: relative; overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.9);
+            display: flex; align-items: center; justify-content: center;
+        }
+        svg { width: 100%; height: 100%; }
+
+        .controls-row {
+            display: flex; gap: 15px; align-items: center; justify-content: center; flex-wrap: wrap;
+        }
+
+        .action-btn {
+            background: var(--accent-blue); color: #0b132b; border: none;
+            padding: 15px 35px; font-size: 22px; font-weight: bold; border-radius: 50px;
+            cursor: pointer; transition: all 0.2s;
+            box-shadow: 0 6px 0 #1d6fa5;
+        }
+        .action-btn:hover { transform: translateY(2px); box-shadow: 0 4px 0 #1d6fa5; }
+        .action-btn:active { transform: translateY(6px); box-shadow: 0 0 0 #1d6fa5; }
+
+        .slider-container {
+            display: flex; flex-direction: column; align-items: center; gap: 5px; background: rgba(255,255,255,0.05);
+            padding: 15px 25px; border-radius: 15px; border: 1px solid var(--border-color);
+        }
+        .slider-container label { font-size: 18px; font-weight: bold; color: var(--accent-orange); }
+        input[type=range] { width: 250px; accent-color: var(--accent-orange); cursor: pointer; height: 8px; }
+
+        .feedback-box {
+            padding: 15px 25px; border-radius: 16px; font-size: 22px; font-weight: bold;
+            text-align: center; width: 100%; max-width: 650px;
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .feedback-box.show { opacity: 1; animation: popIn 0.4px cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .fb-success { background: rgba(56, 176, 0, 0.2); color: #70e000; border: 2px solid var(--accent-green); }
+        .fb-info { background: rgba(78, 168, 222, 0.2); color: #90e0ef; border: 2px solid var(--accent-blue); }
+
+        .overlay-screen {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--panel-bg); z-index: 100;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            text-align: center; padding: 40px;
+        }
+        .hidden { display: none !important; }
+        .emoji-big { font-size: 80px; margin-bottom: 20px; }
+        
+        .btn-start {
+            background: var(--accent-green); color: #0b132b; border: none;
+            padding: 20px 60px; font-size: 26px; font-weight: bold; border-radius: 50px;
+            cursor: pointer; margin-top: 25px; transition: transform 0.2s;
+            box-shadow: 0 8px 0 #234e0b;
+        }
+        .btn-start:hover { transform: translateY(2px); box-shadow: 0 6px 0 #234e0b; }
+        .btn-start:active { transform: translateY(8px); box-shadow: 0 0 0 #234e0b; }
+
+        @keyframes popIn { 0% { transform: scale(0.8); } 100% { transform: scale(1); } }
+        
+        .clickable { cursor: pointer; transition: filter 0.2s; }
+        .clickable:hover { filter: brightness(1.2); }
+    </style>
+</head>
+<body>
+
+    <div class="game-card">
+        
+        <div class="header">
+            <div id="level-indicator" class="level-badge">Уровень 1 из 3</div>
+            <h1 id="level-title" class="title">Загрузка...</h1>
+            <button class="btn-voice" onclick="speakCurrentInstruction()" aria-label="Прочитать вслух">
+                <svg viewBox="0 0 24 24">
+                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="game-area">
+            <div id="instruction" class="instruction">Инструкция...</div>
+            
+            <div class="visual-box" id="visual-container"></div>
+
+            <div id="controls-area" class="controls-row"></div>
+            
+            <div id="feedback" class="feedback-box">Отлично!</div>
+        </div>
+
+        <!-- Приветственный экран -->
+        <div id="screen-intro" class="overlay-screen">
+            <div class="emoji-big">🌊🌀</div>
+            <h1 style="font-size: 38px; margin-bottom: 10px; color: white;">Лаборатория Потоков</h1>
+            <p style="font-size: 22px; max-width: 650px; line-height: 1.5; color: #cbd5e1;">
+                Добро пожаловать! Сегодня мы изучим, как текут жидкости и газы. Посмотрим на спокойный ламинарный поток и бурный турбулентный вихрь!
+            </p>
+            <button class="btn-start" onclick="startGame()">Начать исследование 🚀</button>
+        </div>
+
+        <!-- Экран успеха -->
+        <div id="screen-outro" class="overlay-screen hidden">
+            <div class="emoji-big">🏆⭐</div>
+            <h1 style="font-size: 38px; margin-bottom: 10px; color: white;">Исследование завершено!</h1>
+            <p style="font-size: 22px; max-width: 650px; line-height: 1.5; color: #cbd5e1;">
+                Ты отлично справился! Теперь ты знаешь разницу между плавным ламинарным течением и бурным турбулентным.
+            </p>
+            <button class="btn-start" onclick="location.reload()">Пройти еще раз 🔄</button>
+        </div>
+    </div>
+
+    <script>
+        const LEVELS = [
+            {
+                id: 'laminar_vs_turbulent',
+                title: 'Два мира течения',
+                text: 'Посмотри на два потока воды. Нажми на тот поток, который называется ЛАМИНАРНЫМ (спокойным, где слои не смешиваются).',
+            },
+            {
+                id: 'speed_slider',
+                title: 'Скорость меняет поток',
+                text: 'Двигай ползунок скорости воды вправо. Посмотри, как спокойный (ламинарный) поток превращается в хаотичный (турбулентный) с вихрями!',
+            },
+            {
+                id: 'practical_examples',
+                title: 'Где это в природе?',
+                text: 'Где мы можем встретить турбулентность (вихри)? Нажми на картинку с дымом из трубы или бурлящей рекой на порогах.',
+            },
+            {
+                id: 'shape_aerodynamics',
+                title: 'Форма имеет значение!',
+                text: 'Автомобили и самолеты делают обтекаемыми, чтобы воздух плавно огибал их. Нажми на фигуру, которая создает ровный ламинарный поток без вихрей.',
+            },
+            {
+                id: 'viscosity_flow',
+                title: 'Густота и течение',
+                text: 'Густые жидкости, например сироп или мед, текут плавно и слоями. А вода легко бурлит. Выбери жидкость, которая скорее всего течет ЛАМИНАРНО (ровно).',
+            }
+        ];
+
+        let currentLevelIdx = 0;
+
+        function speakText(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'ru-RU';
+                utterance.rate = 0.9;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        function speakCurrentInstruction() {
+            speakText(LEVELS[currentLevelIdx].text);
+        }
+
+        function startGame() {
+            document.getElementById('screen-intro').classList.add('hidden');
+            loadLevel(currentLevelIdx);
+        }
+
+        function loadLevel(idx) {
+            const level = LEVELS[idx];
+            document.getElementById('level-indicator').innerText = `Уровень ${idx + 1} из ${LEVELS.length}`;
+            document.getElementById('level-title').innerText = level.title;
+            document.getElementById('instruction').innerText = level.text;
+            
+            const fb = document.getElementById('feedback');
+            fb.className = 'feedback-box';
+            fb.innerText = '';
+
+            renderVisual(level.id);
+            setTimeout(speakCurrentInstruction, 500);
+        }
+
+        function renderVisual(type) {
+            const container = document.getElementById('visual-container');
+            const controls = document.getElementById('controls-area');
+            controls.innerHTML = '';
+            let svg = '';
+
+            if (type === 'laminar_vs_turbulent') {
+                svg = `
+                <svg viewBox="0 0 650 320">
+                    <!-- Ламинарный блок (Левый) -->
+                    <g class="clickable" onclick="checkFlowChoice('laminar')">
+                        <rect x="20" y="20" width="280" height="230" rx="15" fill="#0f1f38" stroke="#38b000" stroke-width="3"/>
+                        <text x="160" y="55" font-size="18" fill="#70e000" text-anchor="middle" font-weight="bold">А: Спокойный поток</text>
+                        <!-- Линии ламинарного потока -->
+                        <path d="M 40,90 Q 160,90 280,90" fill="none" stroke="#4ea8de" stroke-width="4" stroke-linecap="round"/>
+                        <path d="M 40,130 Q 160,130 280,130" fill="none" stroke="#4ea8de" stroke-width="4" stroke-linecap="round"/>
+                        <path d="M 40,170 Q 160,170 280,170" fill="none" stroke="#4ea8de" stroke-width="4" stroke-linecap="round"/>
+                        <path d="M 40,210 Q 160,210 280,210" fill="none" stroke="#4ea8de" stroke-width="4" stroke-linecap="round"/>
+                        <text x="160" y="275" font-size="16" fill="#fff" text-anchor="middle">Нажми сюда, если это Ламинарный</text>
+                    </g>
+
+                    <!-- Турбулентный блок (Правый) -->
+                    <g class="clickable" onclick="checkFlowChoice('turbulent')">
+                        <rect x="350" y="20" width="280" height="230" rx="15" fill="#0f1f38" stroke="#ffb703" stroke-width="3"/>
+                        <text x="490" y="55" font-size="18" fill="#ffb703" text-anchor="middle" font-weight="bold">Б: Бурный поток</text>
+                        <!-- Вихри турбулентного потока -->
+                        <path d="M 370,90 Q 410,130 390,160 Q 370,190 430,210" fill="none" stroke="#ffb703" stroke-width="4" stroke-linecap="round"/>
+                        <path d="M 440,80 Q 480,60 520,110 Q 560,160 510,200" fill="none" stroke="#ffb703" stroke-width="4" stroke-linecap="round"/>
+                        <circle cx="470" cy="140" r="15" fill="none" stroke="#ffb703" stroke-width="3" stroke-dasharray="4,4"/>
+                        <text x="490" y="275" font-size="16" fill="#fff" text-anchor="middle">Или сюда?</text>
+                    </g>
+                </svg>`;
+            } 
+            
+            else if (type === 'speed_slider') {
+                svg = `
+                <svg viewBox="0 0 650 240">
+                    <rect x="40" y="40" width="570" height="120" rx="12" fill="#030712" stroke="#3a506b" stroke-width="2"/>
+                    <!-- Потоковые линии (меняются через JS) -->
+                    <g id="dynamic-stream">
+                        <path d="M 60,70 Q 320,70 580,70" fill="none" stroke="#4ea8de" stroke-width="4" id="line1"/>
+                        <path d="M 60,100 Q 320,100 580,100" fill="none" stroke="#4ea8de" stroke-width="4" id="line2"/>
+                        <path d="M 60,130 Q 320,130 580,130" fill="none" stroke="#4ea8de" stroke-width="4" id="line3"/>
+                    </g>
+                    <text x="325" y="205" font-size="18" fill="#ffb703" text-anchor="middle" id="flow-status-text">Скорость низкая: Ламинарное течение</text>
+                </svg>`;
+
+                controls.innerHTML = `
+                <div class="slider-container">
+                    <label for="speedRange">Скорость потока: <span id="speed-val">1</span> м/с</label>
+                    <input type="range" id="speedRange" min="1" max="10" value="1" oninput="updateFlowSpeed(this.value)">
+                </div>
+                <button class="action-btn" onclick="nextLevel()">Всё понятно, дальше! ➡️</button>
+                `;
+            }
+
+            else if (type === 'practical_examples') {
+                svg = `
+                <svg viewBox="0 0 650 300">
+                    <!-- Пример 1: Дым / Самолет (Турбулентность) -->
+                    <g class="clickable" onclick="checkExample(true)">
+                        <rect x="40" y="30" width="260" height="210" rx="15" fill="#111827" stroke="#38b000" stroke-width="3"/>
+                        <text x="170" y="65" font-size="18" fill="#70e000" text-anchor="middle" font-weight="bold">🌪️ След за самолетом</text>
+                        <text x="170" y="110" font-size="50" text-anchor="middle">✈️〰️</text>
+                        <text x="170" y="180" font-size="16" fill="#fff" text-anchor="middle">Вихри и турбулентность</text>
+                    </g>
+
+                    <!-- Пример 2: Медленный сироп (Ламинарное) -->
+                    <g class="clickable" onclick="checkExample(false)">
+                        <rect x="350" y="30" width="260" height="210" rx="15" fill="#111827" stroke="#4ea8de" stroke-width="3"/>
+                        <text x="480" y="65" font-size="18" fill="#4ea8de" text-anchor="middle" font-weight="bold">🍯 Мед в ложке</text>
+                        <text x="480" y="110" font-size="50" text-anchor="middle">🍯👇</text>
+                        <text x="480" y="180" font-size="16" fill="#fff" text-anchor="middle">Спокойный ламинарный</text>
+                    </g>
+                </svg>`;
+            }
+            
+            else if (type === 'shape_aerodynamics') {
+                svg = `
+                <svg viewBox="0 0 650 320">
+                    <!-- Плоская стена -->
+                    <g class="clickable" onclick="checkShapeChoice('wall')">
+                        <rect x="20" y="20" width="280" height="230" rx="15" fill="#111827" stroke="#ef4444" stroke-width="3"/>
+                        <rect x="130" y="80" width="40" height="100" fill="#94a3b8" rx="5"/>
+                        <!-- Поток ударяется и бурлит -->
+                        <path d="M 40,100 L 110,100 Q 150,50 200,100 Q 250,150 280,80" fill="none" stroke="#ffb703" stroke-width="3"/>
+                        <path d="M 40,160 L 110,160 Q 150,210 200,160 Q 250,110 280,180" fill="none" stroke="#ffb703" stroke-width="3"/>
+                        <circle cx="180" cy="130" r="15" fill="none" stroke="#ffb703" stroke-width="2" stroke-dasharray="4,4"/>
+                        <text x="160" y="280" font-size="16" fill="#fff" text-anchor="middle">Кирпич (Турбулентно)</text>
+                    </g>
+
+                    <!-- Обтекаемая капля -->
+                    <g class="clickable" onclick="checkShapeChoice('teardrop')">
+                        <rect x="350" y="20" width="280" height="230" rx="15" fill="#111827" stroke="#38b000" stroke-width="3"/>
+                        <path d="M 400,130 Q 430,70 510,130 Q 430,190 400,130 Z" fill="#94a3b8"/>
+                        <!-- Плавный поток -->
+                        <path d="M 370,100 Q 430,40 540,100 L 610,100" fill="none" stroke="#4ea8de" stroke-width="3"/>
+                        <path d="M 370,160 Q 430,220 540,160 L 610,160" fill="none" stroke="#4ea8de" stroke-width="3"/>
+                        <text x="490" y="280" font-size="16" fill="#fff" text-anchor="middle">Капля (Ламинарно)</text>
+                    </g>
+                </svg>`;
+            }
+
+            else if (type === 'viscosity_flow') {
+                svg = `
+                <svg viewBox="0 0 650 320">
+                    <!-- Вода -->
+                    <g class="clickable" onclick="checkViscosityChoice('water')">
+                        <rect x="20" y="20" width="280" height="230" rx="15" fill="#111827" stroke="#4ea8de" stroke-width="3"/>
+                        <text x="160" y="60" font-size="20" fill="#4ea8de" text-anchor="middle" font-weight="bold">💧 Вода</text>
+                        <rect x="60" y="100" width="200" height="80" fill="#020617" stroke="#334155" stroke-width="4"/>
+                        <path d="M 60,120 Q 110,160 160,110 Q 210,170 260,130" fill="none" stroke="#38bdf8" stroke-width="3"/>
+                        <path d="M 60,160 Q 110,100 160,150 Q 210,110 260,160" fill="none" stroke="#38bdf8" stroke-width="3"/>
+                        <text x="160" y="280" font-size="16" fill="#fff" text-anchor="middle">Легко бурлит</text>
+                    </g>
+
+                    <!-- Густое масло -->
+                    <g class="clickable" onclick="checkViscosityChoice('oil')">
+                        <rect x="350" y="20" width="280" height="230" rx="15" fill="#111827" stroke="#ffb703" stroke-width="3"/>
+                        <text x="490" y="60" font-size="20" fill="#ffb703" text-anchor="middle" font-weight="bold">🍯 Густой сироп</text>
+                        <rect x="390" y="100" width="200" height="80" fill="#020617" stroke="#334155" stroke-width="4"/>
+                        <path d="M 390,120 L 590,120" fill="none" stroke="#fbbf24" stroke-width="5"/>
+                        <path d="M 390,140 L 590,140" fill="none" stroke="#fbbf24" stroke-width="5"/>
+                        <path d="M 390,160 L 590,160" fill="none" stroke="#fbbf24" stroke-width="5"/>
+                        <text x="490" y="280" font-size="16" fill="#fff" text-anchor="middle">Течет ровными слоями</text>
+                    </g>
+                </svg>`;
+            }
+
+            container.innerHTML = svg;
+        }
+
+        function checkFlowChoice(choice) {
+            const fb = document.getElementById('feedback');
+            if (choice === 'laminar') {
+                fb.innerText = 'Верно! Слои движутся параллельно, не смешиваясь. Это ламинарное течение! 🌟';
+                fb.className = 'feedback-box show fb-success';
+                speakText('Верно! Слои движутся параллельно, не смешиваясь. Это ламинарное течение!');
+                setTimeout(nextLevel, 4000);
+            } else {
+                fb.innerText = 'Это турбулентный поток (с вихрями). Ищи спокойный с ровными линиями (А)!';
+                fb.className = 'feedback-box show fb-info';
+                speakText('Это турбулентный поток с вихрями. Ищи спокойный с ровными линиями на букве А!');
+            }
+        }
+
+        function updateFlowSpeed(val) {
+            document.getElementById('speed-val').innerText = val;
+            const line1 = document.getElementById('line1');
+            const line2 = document.getElementById('line2');
+            const line3 = document.getElementById('line3');
+            const statusText = document.getElementById('flow-status-text');
+
+            if (val < 4) {
+                line1.setAttribute('d', `M 60,70 Q 320,70 580,70`);
+                line2.setAttribute('d', `M 60,100 Q 320,100 580,100`);
+                line3.setAttribute('d', `M 60,130 Q 320,130 580,130`);
+                line1.setAttribute('stroke', '#4ea8de');
+                line2.setAttribute('stroke', '#4ea8de');
+                line3.setAttribute('stroke', '#4ea8de');
+                statusText.innerText = 'Скорость низкая: Ламинарное течение (плавное)';
+                statusText.style.fill = '#4ea8de';
+            } else if (val < 8) {
+                line1.setAttribute('d', `M 60,70 Q 200,40 320,90 Q 440,140 580,70`);
+                line2.setAttribute('d', `M 60,100 Q 180,140 320,80 Q 460,20 580,130`);
+                line3.setAttribute('d', `M 60,130 Q 220,100 320,130 Q 420,160 580,100`);
+                line1.setAttribute('stroke', '#ffb703');
+                line2.setAttribute('stroke', '#ffb703');
+                line3.setAttribute('stroke', '#ffb703');
+                statusText.innerText = 'Скорость растет: Появляются первые возмущения!';
+                statusText.style.fill = '#ffb703';
+            } else {
+                line1.setAttribute('d', `M 60,70 Q 150,20 200,120 Q 280,160 380,40 Q 480,160 580,90`);
+                line2.setAttribute('d', `M 60,100 Q 120,160 240,40 Q 340,160 420,80 Q 500,20 580,140`);
+                line3.setAttribute('d', `M 60,130 Q 180,40 280,140 Q 380,20 480,140 Q 540,60 580,100`);
+                line1.setAttribute('stroke', '#ef4444');
+                line2.setAttribute('stroke', '#ef4444');
+                line3.setAttribute('stroke', '#ef4444');
+                statusText.innerText = 'Высокая скорость: Турбулентность! Полный хаос и вихри!';
+                statusText.style.fill = '#ef4444';
+            }
+        }
+
+        function checkExample(isTurbulent) {
+            const fb = document.getElementById('feedback');
+            if (isTurbulent) {
+                fb.innerText = 'Правильно! За самолетом образуется мощный турбулентный след из вихрей! 🚀';
+                fb.className = 'feedback-box show fb-success';
+                speakText('Правильно! За самолетом образуется мощный турбулентный след из вихрей!');
+                setTimeout(nextLevel, 4000);
+            } else {
+                fb.innerText = 'Медленный мед — это ламинарный поток. А нам нужен пример турбулентности (вихрей)!';
+                fb.className = 'feedback-box show fb-info';
+                speakText('Медленный мед это ламинарный поток. А нам нужен пример турбулентности с вихрями.');
+            }
+        }
+
+        function checkShapeChoice(shape) {
+            const fb = document.getElementById('feedback');
+            if (shape === 'teardrop') {
+                fb.innerText = 'Отлично! Обтекаемая форма (капля) не создает вихрей. Воздух течет ламинарно! ✈️';
+                fb.className = 'feedback-box show fb-success';
+                speakText('Отлично! Обтекаемая форма капли не создает вихрей. Воздух течет плавно и ламинарно!');
+                setTimeout(nextLevel, 4500);
+            } else {
+                fb.innerText = 'За плоским кирпичом образуются сильные вихри (турбулентность). Ищи обтекаемую форму!';
+                fb.className = 'feedback-box show fb-info';
+                speakText('За плоским кирпичом образуются сильные вихри. Ищи обтекаемую гладкую форму!');
+            }
+        }
+
+        function checkViscosityChoice(liquid) {
+            const fb = document.getElementById('feedback');
+            if (liquid === 'oil') {
+                fb.innerText = 'Супер! Густой сироп течет медленно и плавно. Его слои не перемешиваются! 🍯';
+                fb.className = 'feedback-box show fb-success';
+                speakText('Супер! Густой сироп течет медленно и плавно. Его слои не перемешиваются. Это ламинарное течение!');
+                setTimeout(nextLevel, 4500);
+            } else {
+                fb.innerText = 'Вода очень текучая, она легко завихряется и становится турбулентной. Выбери густую жидкость!';
+                fb.className = 'feedback-box show fb-info';
+                speakText('Вода очень текучая, она легко завихряется и бурлит. Выбери густую жидкость!');
+            }
+        }
+
+        function nextLevel() {
+            currentLevelIdx++;
+            if (currentLevelIdx < LEVELS.length) {
+                loadLevel(currentLevelIdx);
+            } else {
+                document.getElementById('screen-outro').classList.remove('hidden');
+                speakText("Исследование завершено! Ты отлично справился! Теперь ты знаешь разницу между ламинарным и турбулентным течением.");
+            }
+        }
+    </script>
+</body>
+</html>
